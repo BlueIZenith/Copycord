@@ -1628,20 +1628,6 @@ async def api_backfill_start(payload: dict = Body(...)):
     return JSONResponse({"ok": True})
 
 
-@app.get("/updates")
-async def updates_page(request: Request):
-    env = _read_env()
-    return templates.TemplateResponse(
-        "updates.html",
-        {
-            "request": request,
-            "title": APP_TITLE,
-            "version": CURRENT_VERSION,
-            "log_level": env.get("LOG_LEVEL", "INFO"),
-        },
-    )
-
-
 @app.get("/guilds")
 async def guilds_page(request: Request):
     env = _read_env()

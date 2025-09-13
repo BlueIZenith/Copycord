@@ -1553,7 +1553,7 @@ class ServerReceiver:
             )
             category = None
 
-        ow = dict(self._map_overwrites(guild, overwrites))
+        ow = self._map_overwrites(guild, overwrites)
 
         if kind == "forum":
             await self.ratelimit.acquire(ActionType.CREATE_CHANNEL)
@@ -1875,7 +1875,7 @@ class ServerReceiver:
                     await self._apply_overwrites(cat, overwrites)
                 return cat, False
 
-        ow = dict(self._map_overwrites(guild, overwrites))
+        ow = self._map_overwrites(guild, overwrites)
         await self.ratelimit.acquire(ActionType.CREATE_CHANNEL)
         cat = await guild.create_category(name, overwrites=ow or None)
         logger.info(

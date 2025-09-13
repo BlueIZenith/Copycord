@@ -99,8 +99,6 @@ class ClientListener:
         self.bot.event(self.on_guild_role_create)
         self.bot.event(self.on_guild_role_delete)
         self.bot.event(self.on_guild_role_update)
-        self.bot.event(self.on_guild_emojis_update)
-        self.bot.event(self.on_guild_stickers_update)
         self.bot.event(self.on_guild_join)
         self.bot.event(self.on_guild_remove)
         self.bot.event(self.on_guild_update)
@@ -884,22 +882,6 @@ class ClientListener:
                     getattr(channel, "id", None),
                 )
                 return
-
-            perms: dict[str, dict[str, list[str]]] = {}
-            for target, ow in channel.overwrites.items():
-                allow = [name for name, v in ow if v]
-                deny = [name for name, v in ow if v is False]
-                perms[getattr(target, "name", str(getattr(target, "id", "?")))] = {
-                    "allow": allow,
-                    "deny": deny,
-                }
-            logger.info(
-                "[channels] create: %s (%d) type=%s perms=%s",
-                channel.name,
-                channel.id,
-                getattr(channel.type, "name", channel.type),
-                json.dumps(perms, separators=(",", ":")),
-            )
             self.schedule_sync()
 
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
@@ -966,13 +948,7 @@ class ClientListener:
             return
         if role.guild.id != self.host_guild_id:
             return
-        perm_names = [name for name, v in role.permissions if v]
-        logger.info(
-            "[roles] create: %s (%d) perms=%s",
-            role.name,
-            role.id,
-            json.dumps(perm_names, separators=(",", ":")),
-        )
+        logger.debug("[roles] create: %s (%d) → scheduling sitemap", role.name, role.id)
         self.schedule_sync()
 
     async def on_guild_role_delete(self, role: discord.Role):
@@ -1000,32 +976,6 @@ class ClientListener:
         logger.debug(
             "[roles] update: %s (%d) → scheduling sitemap", after.name, after.id
         )
-        self.schedule_sync()
-
-    async def on_guild_emojis_update(self, guild, before, after):
-        if not self.config.ENABLE_CLONING or not getattr(
-            self.config, "CLONE_EMOJI", True
-        ):
-            return
-        if guild.id != self.host_guild_id:
-            return
-        before_ids = {e.id for e in before}
-        for emoji in after:
-            if emoji.id not in before_ids:
-                logger.info("[emojis] create: %s (%d)", emoji.name, emoji.id)
-        self.schedule_sync()
-
-    async def on_guild_stickers_update(self, guild, before, after):
-        if not self.config.ENABLE_CLONING or not getattr(
-            self.config, "CLONE_STICKER", True
-        ):
-            return
-        if guild.id != self.host_guild_id:
-            return
-        before_ids = {s.id for s in before}
-        for sticker in after:
-            if sticker.id not in before_ids:
-                logger.info("[stickers] create: %s (%d)", sticker.name, sticker.id)
         self.schedule_sync()
 
     async def on_guild_join(self, guild: discord.Guild):

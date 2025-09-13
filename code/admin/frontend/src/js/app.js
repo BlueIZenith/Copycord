@@ -1096,103 +1096,6 @@
     return new URLSearchParams(fd).toString();
   }
 
-  async function openStartOptionsModal() {
-    try {
-      const res = await fetch("/api/clone/options", { credentials: "same-origin" });
-      if (!res.ok) return null;
-      const data = await res.json();
-      const modal = document.createElement("div");
-      modal.className = "modal-backdrop";
-      const catMap = {};
-      (data.categories || []).forEach((c) => {
-        catMap[c.original_category_id] = { ...c, channels: [] };
-      });
-      const uncategorized = [];
-      (data.channels || []).forEach((ch) => {
-        const pid = ch.original_parent_category_id;
-        if (pid && catMap[pid]) catMap[pid].channels.push(ch);
-        else uncategorized.push(ch);
-      });
-      function renderCat(cat) {
-        let html = `<li><label class="check"><input type="checkbox" data-kind="category" data-id="${cat.original_category_id}" checked><span>${cat.original_category_name}</span></label>`;
-        if (cat.channels.length) {
-          html += "<ul>" + cat.channels.map(renderChan).join("") + "</ul>";
-        }
-        html += "</li>";
-        return html;
-      }
-      function renderChan(ch) {
-        return `<li><label class="check"><input type="checkbox" data-kind="channel" data-id="${ch.original_channel_id}" checked><span>${ch.original_channel_name}</span></label></li>`;
-      }
-      const catsHtml = Object.values(catMap)
-        .map(renderCat)
-        .join("");
-      const uncHtml = uncategorized.map(renderChan).join("");
-      const roleHtml = (data.roles || [])
-        .map(
-          (r) =>
-            `<li><label class="check"><input type="checkbox" data-kind="role" data-id="${r.original_role_id}" checked><span>${r.original_role_name}</span></label></li>`
-        )
-        .join("");
-      const emojiHtml = (data.emojis || [])
-        .map(
-          (r) =>
-            `<li><label class="check"><input type="checkbox" data-kind="emoji" data-id="${r.original_emoji_id}" checked><span>${r.original_emoji_name}</span></label></li>`
-        )
-        .join("");
-      const stickerHtml = (data.stickers || [])
-        .map(
-          (r) =>
-            `<li><label class="check"><input type="checkbox" data-kind="sticker" data-id="${r.original_sticker_id}" checked><span>${r.original_sticker_name}</span></label></li>`
-        )
-        .join("");
-      modal.innerHTML = `
-        <div class="modal" role="dialog" aria-modal="true">
-          <header><h3>Select items to clone</h3></header>
-          <div class="modal-body">
-            <section><h4>Categories</h4><ul>${catsHtml}</ul>${uncHtml ? `<h4>Uncategorized</h4><ul>${uncHtml}</ul>` : ""}</section>
-            <section><h4>Roles</h4><ul>${roleHtml}</ul></section>
-            <section><h4>Emojis</h4><ul>${emojiHtml}</ul></section>
-            <section><h4>Stickers</h4><ul>${stickerHtml}</ul></section>
-          </div>
-          <footer>
-            <button class="btn btn-primary" data-act="ok">Start</button>
-            <button class="btn btn-ghost" data-act="cancel">Cancel</button>
-          </footer>
-        </div>`;
-      document.body.appendChild(modal);
-      return await new Promise((resolve) => {
-        modal.addEventListener("click", (ev) => {
-          if (ev.target.dataset.act === "cancel" || ev.target === modal) {
-            modal.remove();
-            resolve(null);
-          }
-          if (ev.target.dataset.act === "ok") {
-            const out = {
-              categories: [],
-              channels: [],
-              roles: [],
-              emojis: [],
-              stickers: [],
-            };
-            modal
-              .querySelectorAll('input[type="checkbox"]')
-              .forEach((cb) => {
-                if (!cb.checked) return;
-                const k = cb.dataset.kind;
-                const id = cb.dataset.id;
-                if (k && id) out[k + "s"].push(id);
-              });
-            modal.remove();
-            resolve(out);
-          }
-        });
-      });
-    } catch {
-      return null;
-    }
-  }
-
   const REQUIRED_KEYS = [
     "SERVER_TOKEN",
     "CLIENT_TOKEN",
@@ -1470,15 +1373,6 @@
             if (btn2) btn2.disabled = false;
             return;
           }
-
-          // Open selection modal before starting
-          const selection = await openStartOptionsModal();
-          if (!selection) {
-            if (btn) btn.disabled = false;
-            f.classList.remove("is-loading");
-            return;
-          }
-          f.dataset.selection = JSON.stringify(selection);
         }
 
         if (btn) btn.disabled = true;
@@ -1486,10 +1380,6 @@
 
         try {
           const body = new FormData(f);
-          if (f.dataset.selection) {
-            body.append("clone_selection", f.dataset.selection);
-            delete f.dataset.selection;
-          }
           const res = await fetch(f.action, {
             method: "POST",
             body,

@@ -53,6 +53,15 @@ class RoleManager:
         logger.debug("[🧩] Role sync task scheduled.")
         self._task = asyncio.create_task(self._run_sync(g, self._last_roles))
 
+    async def sync_now(self, roles: List[Dict] | None) -> None:
+        """Synchronously run a role sync."""
+        g = self.bot.get_guild(self.clone_guild_id)
+        if not g:
+            logger.debug("Role sync: clone guild not ready.")
+            return
+        self._last_roles = roles or []
+        await self._run_sync(g, self._last_roles)
+
     async def _run_sync(self, guild: discord.Guild, incoming: List[Dict]) -> None:
         async with self._lock:
             try:

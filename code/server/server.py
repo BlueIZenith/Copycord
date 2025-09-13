@@ -820,7 +820,9 @@ class ServerReceiver:
                 self.stickers.kickoff_sync()
 
             if self.config.CLONE_ROLES:
-                self.roles.kickoff_sync(sitemap.get("roles", []))
+                # Run role sync synchronously so role permissions are ready
+                # before categories and channels are processed.
+                await self.roles.sync_now(sitemap.get("roles", []))
 
             cat_created, ch_reparented = await self._repair_deleted_categories(
                 guild, sitemap

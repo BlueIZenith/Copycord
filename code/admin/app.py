@@ -1560,23 +1560,6 @@ async def channels_api():
     return {"items": out}
 
 
-@app.get("/api/clone/options", response_class=JSONResponse)
-async def clone_options():
-    """Return available clone items for selection before starting."""
-    chans = [dict(r) for r in db.get_all_channel_mappings()]
-    cats = [dict(r) for r in db.get_all_category_mappings()]
-    roles = [dict(r) for r in db.get_all_role_mappings()]
-    emojis = [dict(r) for r in db.get_all_emoji_mappings()]
-    stickers = [dict(r) for r in db.get_all_sticker_mappings()]
-    return {
-        "ok": True,
-        "channels": chans,
-        "categories": cats,
-        "roles": roles,
-        "emojis": emojis,
-        "stickers": stickers,
-    }
-
 
 @app.post("/api/backfill/start", response_class=JSONResponse)
 async def api_backfill_start(payload: dict = Body(...)):

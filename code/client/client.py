@@ -885,16 +885,20 @@ class ClientListener:
                 )
                 return
 
-            perms = {
-                t.id: (ow.pair()[0].value, ow.pair()[1].value)
-                for t, ow in channel.overwrites.items()
-            }
+            perms: dict[str, dict[str, list[str]]] = {}
+            for target, ow in channel.overwrites.items():
+                allow = [name for name, v in ow if v]
+                deny = [name for name, v in ow if v is False]
+                perms[getattr(target, "name", str(getattr(target, "id", "?")))] = {
+                    "allow": allow,
+                    "deny": deny,
+                }
             logger.info(
                 "[channels] create: %s (%d) type=%s perms=%s",
                 channel.name,
                 channel.id,
                 getattr(channel.type, "name", channel.type),
-                perms,
+                json.dumps(perms, separators=(",", ":")),
             )
             self.schedule_sync()
 
@@ -962,11 +966,12 @@ class ClientListener:
             return
         if role.guild.id != self.host_guild_id:
             return
+        perm_names = [name for name, v in role.permissions if v]
         logger.info(
-            "[roles] create: %s (%d) perms=%d",
+            "[roles] create: %s (%d) perms=%s",
             role.name,
             role.id,
-            role.permissions.value,
+            json.dumps(perm_names, separators=(",", ":")),
         )
         self.schedule_sync()
 

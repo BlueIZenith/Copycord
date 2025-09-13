@@ -52,7 +52,22 @@
           const sum = document.createElement('summary');
           sum.textContent = `${up.type} created: ${up.name} (${up.id})`;
           const pre = document.createElement('pre');
-          pre.textContent = up.perms || 'Permission info unavailable';
+          if (Array.isArray(up.perms)) {
+            pre.textContent = up.perms.join(', ') || 'No permissions';
+          } else if (up.perms && typeof up.perms === 'object') {
+            const lines = [];
+            for (const [target, obj] of Object.entries(up.perms)) {
+              if (obj.allow.length) {
+                lines.push(`${target} allow: ${obj.allow.join(', ')}`);
+              }
+              if (obj.deny.length) {
+                lines.push(`${target} deny: ${obj.deny.join(', ')}`);
+              }
+            }
+            pre.textContent = lines.join('\n') || 'No permissions';
+          } else {
+            pre.textContent = 'Permission info unavailable';
+          }
           det.appendChild(sum);
           det.appendChild(pre);
           li.appendChild(det);
@@ -62,11 +77,11 @@
         list.prepend(li);
       }
       function parseLine(line) {
-        let m = line.match(/\[roles\] create: (.+?) \((\d+)\) perms=(\d+)/);
-        if (m) return { type: 'role', name: m[1], id: m[2], perms: m[3] };
+        let m = line.match(/\[roles\] create: (.+?) \((\d+)\) perms=(.*)/);
+        if (m) return { type: 'role', name: m[1], id: m[2], perms: JSON.parse(m[3]) };
         m = line.match(/\[channels\] create: (.+?) \((\d+)\) type=(\w+) perms=(.*)/);
         if (m) {
-          return { type: m[3] === 'category' ? 'category' : 'channel', name: m[1], id: m[2], perms: m[4] };
+          return { type: m[3] === 'category' ? 'category' : 'channel', name: m[1], id: m[2], perms: JSON.parse(m[4]) };
         }
         m = line.match(/\[emojis\] create: (.+?) \((\d+)\)/);
         if (m) return { type: 'emoji', name: m[1], id: m[2] };

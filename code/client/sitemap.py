@@ -10,8 +10,10 @@
 from __future__ import annotations
 import asyncio
 import logging
+from dataclasses import asdict
 from typing import List, Dict, Optional
 import discord
+from common.roles import RoleData
 
 
 class SitemapService:
@@ -93,6 +95,12 @@ class SitemapService:
                     continue
             return perms
 
+        def _color_val(c):
+            try:
+                return c.value
+            except Exception:
+                return int(c)
+
         try:
             fetched_stickers = await guild.fetch_stickers()
         except Exception as e:
@@ -134,20 +142,20 @@ class SitemapService:
             ],
             "stickers": stickers_payload,
             "roles": [
-                {
-                    "id": r.id,
-                    "name": r.name,
-                    "permissions": r.permissions.value,
-                    "color": (
-                        r.color.value if hasattr(r.color, "value") else int(r.color)
-                    ),
-                    "hoist": r.hoist,
-                    "mentionable": r.mentionable,
-                    "managed": r.managed,
-                    "everyone": (r == r.guild.default_role),
-                    "position": r.position,
-                }
-                for r in guild.roles
+                asdict(
+                    RoleData(
+                        id=r.id,
+                        name=r.name,
+                        permissions=str(r.permissions.value),
+                        color=f"#{_color_val(r.color):06X}",
+                        hoist=r.hoist,
+                        mentionable=r.mentionable,
+                        managed=r.managed,
+                        isEveryone=(r == r.guild.default_role),
+                        position=r.position,
+                    )
+                )
+                for r in sorted(guild.roles, key=lambda rr: rr.position, reverse=True)
             ],
             "community": {
                 "enabled": "COMMUNITY" in guild.features,

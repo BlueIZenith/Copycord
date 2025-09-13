@@ -10,6 +10,7 @@
 from __future__ import annotations
 import asyncio, logging, discord
 from typing import List, Dict, Tuple
+from common.roles import RoleData
 from server.rate_limiter import RateLimitManager, ActionType
 
 logger = logging.getLogger("server.roles")
@@ -87,11 +88,13 @@ class RoleManager:
         current = {
             r["original_role_id"]: dict(r) for r in self.db.get_all_role_mappings()
         }
-        incoming_filtered = {
-            r["id"]: r
-            for r in incoming
-            if not r.get("managed") and not r.get("everyone")
-        }
+
+        incoming_roles = [RoleData(**r) for r in incoming]
+        incoming_filtered_roles = [
+            r for r in incoming_roles if not r.managed and not r.isEveryone
+        ]
+        incoming_filtered_roles.sort(key=lambda r: r.position, reverse=True)
+        incoming_map = {r.id: r for r in incoming_filtered_roles}
 
         clone_by_id = {r.id: r for r in guild.roles}
 
@@ -103,7 +106,7 @@ class RoleManager:
         deleted = updated = created = 0
 
         for orig_id in list(current.keys()):
-            if orig_id not in incoming_filtered:
+            if orig_id not in incoming_map:
                 row = current[orig_id]
                 cloned_id = (
                     row["cloned_role_id"] if "cloned_role_id" in row.keys() else None
@@ -162,7 +165,8 @@ class RoleManager:
         }
         clone_by_id = {r.id: r for r in guild.roles}
 
-        for orig_id, info in incoming_filtered.items():
+        for role in incoming_filtered_roles:
+            orig_id = role.id
             mapping = current.get(orig_id)
             cloned = None
             if mapping:
@@ -173,11 +177,14 @@ class RoleManager:
                     except Exception:
                         cloned = None
 
-            want_name = info["name"]
-            want_perms = discord.Permissions(info.get("permissions", 0))
-            want_color = discord.Color(info.get("color", 0))
-            want_hoist = bool(info.get("hoist", False))
-            want_mention = bool(info.get("mentionable", False))
+            want_name = role.name
+            want_perms = discord.Permissions(int(role.permissions or 0))
+            try:
+                want_color = discord.Color(int(role.color.lstrip("#"), 16))
+            except Exception:
+                want_color = discord.Color(0)
+            want_hoist = bool(role.hoist)
+            want_mention = bool(role.mentionable)
 
             if orig_id in blocked:
                 if (

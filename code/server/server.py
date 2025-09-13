@@ -1878,8 +1878,10 @@ class ServerReceiver:
                 return cat, False
 
         ow = self._map_overwrites(guild, overwrites)
+        if not isinstance(ow, dict):
+            ow = {}
         await self.ratelimit.acquire(ActionType.CREATE_CHANNEL)
-        cat = await guild.create_category(name, overwrites=ow or None)
+        cat = await guild.create_category(name, overwrites=ow if ow else None)
         logger.info(
             "[➕] Created category %r (orig ID %d) → clone ID %d",
             name,

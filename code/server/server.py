@@ -947,6 +947,7 @@ class ServerReceiver:
 
         wanted = {c["id"] for c in sitemap.get("categories", [])}
         name_for = {c["id"]: c["name"] for c in sitemap.get("categories", [])}
+        over_for = {c["id"]: c.get("overwrites") for c in sitemap.get("categories", [])}
 
         for cat_row in self.db.get_all_category_mappings():
             orig_cat_id = cat_row["original_category_id"]
@@ -955,7 +956,7 @@ class ServerReceiver:
 
             if not guild.get_channel(cat_row["cloned_category_id"]):
                 new_cat, did_create = await self._ensure_category(
-                    guild, orig_cat_id, name_for[orig_cat_id]
+                    guild, orig_cat_id, name_for[orig_cat_id], over_for.get(orig_cat_id)
                 )
                 if did_create:
                     created += 1
@@ -1018,7 +1019,9 @@ class ServerReceiver:
             parts.append(f"Renamed {ren} categories")
         created = 0
         for cat in sitemap.get("categories", []):
-            _, did_create = await self._ensure_category(guild, cat["id"], cat["name"])
+            _, did_create = await self._ensure_category(
+                guild, cat["id"], cat["name"], cat.get("overwrites")
+            )
             if did_create:
                 created += 1
         if created:
@@ -1053,7 +1056,9 @@ class ServerReceiver:
                     else None
                 )
 
-            ch = await self._create_channel(guild, "forum", forum["name"], parent)
+            ch = await self._create_channel(
+                guild, "forum", forum["name"], parent, forum.get("overwrites")
+            )
             created += 1
 
             wh = await self._create_webhook_safely(
@@ -1115,7 +1120,14 @@ class ServerReceiver:
                 mapping["cloned_channel_id"]
             )
             _, clone_id, _ = await self._ensure_channel_and_webhook(
-                guild, orig, name, pid, pname, ctype
+                guild,
+                orig,
+                name,
+                pid,
+                pname,
+                ctype,
+                item.get("overwrites"),
+                item.get("parent_overwrites"),
             )
             if is_new:
                 created += 1
@@ -1465,6 +1477,8 @@ class ServerReceiver:
                         "parent_id": cat["id"],
                         "parent_name": cat["name"],
                         "type": ch.get("type", 0),
+                        "overwrites": ch.get("overwrites"),
+                        "parent_overwrites": cat.get("overwrites"),
                     }
                 )
         for ch in sitemap.get("standalone_channels", []):
@@ -1475,6 +1489,7 @@ class ServerReceiver:
                     "parent_id": None,
                     "parent_name": None,
                     "type": ch.get("type", 0),
+                    "overwrites": ch.get("overwrites"),
                 }
             )
         for forum in sitemap.get("forums", []):
@@ -1485,6 +1500,7 @@ class ServerReceiver:
                     "parent_id": forum.get("category_id"),
                     "parent_name": None,
                     "type": ChannelType.forum.value,
+                    "overwrites": forum.get("overwrites"),
                 }
             )
         return items
@@ -1514,7 +1530,12 @@ class ServerReceiver:
         )
 
     async def _create_channel(
-        self, guild: Guild, kind: str, name: str, category: CategoryChannel | None
+        self,
+        guild: Guild,
+        kind: str,
+        name: str,
+        category: CategoryChannel | None,
+        overwrites: List[Dict] | None = None,
     ) -> Union[TextChannel, ForumChannel]:
         """
         Create a channel of `kind` ('text'|'news'|'forum') named `name` under
@@ -1532,12 +1553,18 @@ class ServerReceiver:
             )
             category = None
 
+        ow = self._map_overwrites(guild, overwrites)
+
         if kind == "forum":
             await self.ratelimit.acquire(ActionType.CREATE_CHANNEL)
-            ch = await guild.create_forum_channel(name=name, category=category)
+            ch = await guild.create_forum_channel(
+                name=name, category=category, overwrites=ow or None
+            )
         else:
             await self.ratelimit.acquire(ActionType.CREATE_CHANNEL)
-            ch = await guild.create_text_channel(name=name, category=category)
+            ch = await guild.create_text_channel(
+                name=name, category=category, overwrites=ow or None
+            )
 
         logger.info("[➕] Created %s channel '%s' #%s", kind, name, ch.id)
 
@@ -1830,7 +1857,11 @@ class ServerReceiver:
         return renamed
 
     async def _ensure_category(
-        self, guild: discord.Guild, original_id: int, name: str
+        self,
+        guild: discord.Guild,
+        original_id: int,
+        name: str,
+        overwrites: List[Dict] | None = None,
     ) -> Tuple[discord.CategoryChannel, bool]:
         """
         Ensure that a mapping exists for original_id → a cloned category.
@@ -1840,10 +1871,13 @@ class ServerReceiver:
         if row:
             cat = guild.get_channel(row["cloned_category_id"])
             if cat:
+                if overwrites is not None:
+                    await self._apply_overwrites(cat, overwrites)
                 return cat, False
 
+        ow = self._map_overwrites(guild, overwrites)
         await self.ratelimit.acquire(ActionType.CREATE_CHANNEL)
-        cat = await guild.create_category(name)
+        cat = await guild.create_category(name, overwrites=ow or None)
         logger.info(
             "[➕] Created category %r (orig ID %d) → clone ID %d",
             name,
@@ -1882,6 +1916,61 @@ class ServerReceiver:
 
             return webhook
 
+    def _map_overwrites(
+        self, guild: discord.Guild, data: List[Dict] | None
+    ) -> Dict[Union[discord.Role, discord.Member], discord.PermissionOverwrite]:
+        result: Dict[Union[discord.Role, discord.Member], discord.PermissionOverwrite] = {}
+        if not data:
+            return result
+        for ow in data:
+            try:
+                target_id = int(ow.get("id"))
+                typ = int(ow.get("type", 0))
+                allow = discord.Permissions(int(ow.get("allow", 0)))
+                deny = discord.Permissions(int(ow.get("deny", 0)))
+                perm = discord.PermissionOverwrite.from_pair(allow, deny)
+                if typ == 0:
+                    if target_id == int(self.config.HOST_GUILD_ID):
+                        target = guild.default_role
+                    else:
+                        row = self.db.get_role_mapping(target_id)
+                        target = None
+                        if row and row.get("cloned_role_id"):
+                            target = guild.get_role(int(row["cloned_role_id"]))
+                    if target:
+                        result[target] = perm
+                else:
+                    member = guild.get_member(target_id)
+                    if member:
+                        result[member] = perm
+            except Exception:
+                continue
+        return result
+
+    async def _apply_overwrites(
+        self, ch: discord.abc.GuildChannel, data: List[Dict] | None
+    ) -> None:
+        if data is None:
+            return
+        desired = self._map_overwrites(ch.guild, data)
+        current = {t.id: ow for t, ow in ch.overwrites.items()}
+        desired_map = {t.id: ow for t, ow in desired.items()}
+        if current == desired_map:
+            return
+        try:
+            await self.ratelimit.acquire(ActionType.EDIT_CHANNEL)
+            await ch.edit(overwrites=desired)
+            logger.info(
+                "[✏️] Updated permissions for %s #%d", ch.name, ch.id
+            )
+        except Exception as e:
+            logger.warning(
+                "[⚠️] Failed to update permissions for %s #%d: %s",
+                getattr(ch, "name", "?"),
+                getattr(ch, "id", 0),
+                e,
+            )
+
     async def _ensure_channel_and_webhook(
         self,
         guild: discord.Guild,
@@ -1890,6 +1979,8 @@ class ServerReceiver:
         parent_id: Optional[int],
         parent_name: Optional[str],
         channel_type: int,
+        overwrites: List[Dict] | None = None,
+        parent_overwrites: List[Dict] | None = None,
     ) -> Tuple[int, int, str]:
         """
         Ensures that a channel and its corresponding webhook exist in the clone guild.
@@ -1900,7 +1991,9 @@ class ServerReceiver:
             return
         category = None
         if parent_id is not None:
-            category, _ = await self._ensure_category(guild, parent_id, parent_name)
+            category, _ = await self._ensure_category(
+                guild, parent_id, parent_name, parent_overwrites
+            )
 
         for orig_id, row in list(self.chan_map.items()):
             if orig_id != original_id:
@@ -1911,6 +2004,7 @@ class ServerReceiver:
             if clone_id is not None:
                 ch = guild.get_channel(clone_id)
                 if ch:
+                    await self._apply_overwrites(ch, overwrites)
                     if wh_url:
                         return original_id, clone_id, wh_url
 
@@ -1948,7 +2042,9 @@ class ServerReceiver:
                 break
 
         kind = "news" if channel_type == ChannelType.news.value else "text"
-        ch = await self._create_channel(guild, kind, original_name, category)
+        ch = await self._create_channel(
+            guild, kind, original_name, category, overwrites
+        )
         wh = await self._create_webhook_safely(
             ch, "Copycord", await self._get_default_avatar_bytes()
         )

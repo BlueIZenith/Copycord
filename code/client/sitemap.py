@@ -76,6 +76,23 @@ class SitemapService:
                 u = getattr(asset, "url", None) if asset else None
             return str(u) if u else ""
 
+        def _serialize_overwrites(ow_map):
+            perms = []
+            for target, ow in ow_map.items():
+                try:
+                    allow, deny = ow.pair()
+                    perms.append(
+                        {
+                            "id": target.id,
+                            "type": 0 if isinstance(target, discord.Role) else 1,
+                            "allow": allow.value,
+                            "deny": deny.value,
+                        }
+                    )
+                except Exception:
+                    continue
+            return perms
+
         try:
             fetched_stickers = await guild.fetch_stickers()
         except Exception as e:
@@ -147,16 +164,31 @@ class SitemapService:
 
         for cat in guild.categories:
             channels = [
-                {"id": ch.id, "name": ch.name, "type": ch.type.value}
+                {
+                    "id": ch.id,
+                    "name": ch.name,
+                    "type": ch.type.value,
+                    "overwrites": _serialize_overwrites(ch.overwrites),
+                }
                 for ch in cat.channels
                 if isinstance(ch, discord.TextChannel)
             ]
             sitemap["categories"].append(
-                {"id": cat.id, "name": cat.name, "channels": channels}
+                {
+                    "id": cat.id,
+                    "name": cat.name,
+                    "overwrites": _serialize_overwrites(cat.overwrites),
+                    "channels": channels,
+                }
             )
 
         sitemap["standalone_channels"] = [
-            {"id": ch.id, "name": ch.name, "type": ch.type.value}
+            {
+                "id": ch.id,
+                "name": ch.name,
+                "type": ch.type.value,
+                "overwrites": _serialize_overwrites(ch.overwrites),
+            }
             for ch in guild.text_channels
             if ch.category is None
         ]
@@ -167,6 +199,7 @@ class SitemapService:
                     "id": forum.id,
                     "name": forum.name,
                     "category_id": forum.category.id if forum.category else None,
+                    "overwrites": _serialize_overwrites(forum.overwrites),
                 }
             )
 

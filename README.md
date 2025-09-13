@@ -77,18 +77,23 @@ copycord/
 ```yaml
 services:
   admin:
-    image: ghcr.io/copycord/copycord:v2.1.2
+    build:
+      context: .
+      dockerfile: code/dockerfile
+    image: copycord-local:dev
     container_name: copycord-admin
     environment:
       - ROLE=admin
     ports:
-      - "8080:8080"
+      - "8020:8020"
     volumes:
       - ./data:/data
-    restart: unless-stopped
 
   server:
-    image: ghcr.io/copycord/copycord:v2.1.2
+    build:
+      context: .
+      dockerfile: code/dockerfile
+    image: copycord-local:dev
     container_name: copycord-server
     environment:
       - ROLE=server
@@ -96,10 +101,12 @@ services:
       - ./data:/data
     depends_on:
       - admin
-    restart: unless-stopped
 
   client:
-    image: ghcr.io/copycord/copycord:v2.1.2
+    build:
+      context: .
+      dockerfile: code/dockerfile
+    image: copycord-local:dev
     container_name: copycord-client
     environment:
       - ROLE=client
@@ -107,7 +114,6 @@ services:
       - ./data:/data
     depends_on:
       - admin
-    restart: unless-stopped
 ```
 
 ### 2. Launch Copycord

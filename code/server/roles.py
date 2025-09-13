@@ -359,7 +359,7 @@ class RoleManager:
         """Ensure cloned roles appear in the same relative order as the source."""
         try:
             mapping = {
-                r["original_role_id"]: r
+                r["original_role_id"]: dict(r)
                 for r in self.db.get_all_role_mappings()
             }
             base = bot_top - 1

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en" class="boot">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Updates · Copycord</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="{{ request.url_for('static', path='assets/main.css') }}?v={{ version }}">
+  <link rel="icon" type="image/png" href="/static/logo.png">
+</head>
+
+<body class="updates-page">
+  <header class="site-header" role="banner">
+    <button id="menu-toggle" class="menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="side-menu"
+      aria-label="Open menu">
+      <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+    </button>
+    <div class="header-left">
+      <img src="/static/logo.png" alt="Logo" class="header-logo">
+      <h1>Copycord</h1>
+    </div>
+  </header>
+
+  <div id="menu-backdrop" class="menu-backdrop" hidden></div>
+  <aside id="side-menu" class="side-menu" aria-hidden="true" aria-label="Site menu">
+    <div class="side-menu-header"></div>
+    <nav class="side-menu-body">
+      <ul class="menu-list">
+        <li><a class="menu-item" href="/" rel="noopener">Configuration</a></li>
+        <li><a class="menu-item" href="/channels" rel="noopener">Channels</a></li>
+        <li><a class="menu-item" href="/guilds" rel="noopener">Guilds</a></li>
+        <li><a class="menu-item is-active" href="/updates" rel="noopener">Updates</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="container wide">
+    <div class="card">
+      <h3>Updates</h3>
+      <ul id="updates-list" class="log-lines" style="list-style:none;padding-left:0;"></ul>
+    </div>
+  </div>
+
+  <script type="module" src="{{ request.url_for('static', path='assets/main.js') }}?v={{ version }}"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const list = document.getElementById('updates-list');
+      function addUpdate(up) {
+        const li = document.createElement('li');
+        if (['role', 'channel', 'category'].includes(up.type)) {
+          const det = document.createElement('details');
+          const sum = document.createElement('summary');
+          sum.textContent = `${up.type} created: ${up.name} (${up.id})`;
+          const pre = document.createElement('pre');
+          pre.textContent = up.perms || 'Permission info unavailable';
+          det.appendChild(sum);
+          det.appendChild(pre);
+          li.appendChild(det);
+        } else {
+          li.textContent = `${up.type} created: ${up.name} (${up.id})`;
+        }
+        list.prepend(li);
+      }
+      function parseLine(line) {
+        let m = line.match(/\[roles\] create: (.+?) \((\d+)\) perms=(\d+)/);
+        if (m) return { type: 'role', name: m[1], id: m[2], perms: m[3] };
+        m = line.match(/\[channels\] create: (.+?) \((\d+)\) type=(\w+) perms=(.*)/);
+        if (m) {
+          return { type: m[3] === 'category' ? 'category' : 'channel', name: m[1], id: m[2], perms: m[4] };
+        }
+        m = line.match(/\[emojis\] create: (.+?) \((\d+)\)/);
+        if (m) return { type: 'emoji', name: m[1], id: m[2] };
+        m = line.match(/\[stickers\] create: (.+?) \((\d+)\)/);
+        if (m) return { type: 'sticker', name: m[1], id: m[2] };
+        return null;
+      }
+      const es = new EventSource('/logs/stream/client');
+      es.onmessage = (ev) => {
+        try {
+          const obj = JSON.parse(ev.data);
+          const lines = obj.lines || (obj.line ? [obj.line] : []);
+          lines.forEach((ln) => {
+            const up = parseLine(ln);
+            if (up) addUpdate(up);
+          });
+        } catch (e) {
+          // ignore
+        }
+      };
+    });
+  </script>
+</body>
+
+</html>

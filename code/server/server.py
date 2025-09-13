@@ -625,6 +625,8 @@ class ServerReceiver:
             )
 
             try:
+                if self.config.CLONE_ROLES:
+                    await self.roles.sync_now(sitemap.get("roles", []))
                 summary = await self.sync_structure(task_id, sitemap)
             except Exception:
                 logger.exception("Error processing sitemap %d", task_id)
@@ -818,11 +820,6 @@ class ServerReceiver:
 
             if self.config.CLONE_STICKER:
                 self.stickers.kickoff_sync()
-
-            if self.config.CLONE_ROLES:
-                # Run role sync synchronously so role permissions are ready
-                # before categories and channels are processed.
-                await self.roles.sync_now(sitemap.get("roles", []))
 
             cat_created, ch_reparented = await self._repair_deleted_categories(
                 guild, sitemap

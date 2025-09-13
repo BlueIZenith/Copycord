@@ -1347,33 +1347,34 @@
     };
 
     document.querySelectorAll('form[method="post"]').forEach((f) => {
+      const actionPath = new URL(f.action, location.origin).pathname;
+      if (f.id === "toggle-form") {
+        // Allow the start/stop form to submit normally so the server can
+        // handle redirects, but block if required config values are missing.
+        f.addEventListener("submit", (e) => {
+          const { ok, missing } = configState();
+          if (!ok) {
+            e.preventDefault();
+            showToast(`Missing required config: ${missing.join(", ")}`, {
+              type: "error",
+              timeout: 6000,
+            });
+            markInvalid(missing);
+            document.getElementById(missing[0])?.focus();
+          }
+        });
+        return;
+      }
+
       f.addEventListener("submit", async (e) => {
         e.preventDefault();
 
-        const actionPath = new URL(f.action, location.origin).pathname;
         if (actionPath === "/save") {
           cfgValidated = true;
           const { missing } = configState();
           markInvalid(missing);
         }
         const btn = f.querySelector('button[type="submit"],button:not([type])');
-
-        if (f.id === "toggle-form" && actionPath === "/start") {
-          const { ok, missing } = configState();
-          if (!ok) {
-            showToast(`Missing required config: ${missing.join(", ")}`, {
-              type: "error",
-              timeout: 6000,
-            });
-            document.getElementById(missing[0])?.focus();
-            f.classList.remove("is-loading");
-            const btn2 = f.querySelector(
-              'button[type="submit"],button:not([type])'
-            );
-            if (btn2) btn2.disabled = false;
-            return;
-          }
-        }
 
         if (btn) btn.disabled = true;
         f.classList.add("is-loading");

@@ -625,6 +625,8 @@ class ServerReceiver:
             )
 
             try:
+                if self.config.CLONE_ROLES:
+                    await self.roles.sync_now(sitemap.get("roles", []))
                 summary = await self.sync_structure(task_id, sitemap)
             except Exception:
                 logger.exception("Error processing sitemap %d", task_id)
@@ -818,9 +820,6 @@ class ServerReceiver:
 
             if self.config.CLONE_STICKER:
                 self.stickers.kickoff_sync()
-
-            if self.config.CLONE_ROLES:
-                self.roles.kickoff_sync(sitemap.get("roles", []))
 
             cat_created, ch_reparented = await self._repair_deleted_categories(
                 guild, sitemap
@@ -1876,8 +1875,10 @@ class ServerReceiver:
                 return cat, False
 
         ow = self._map_overwrites(guild, overwrites)
+        if not isinstance(ow, dict):
+            ow = {}
         await self.ratelimit.acquire(ActionType.CREATE_CHANNEL)
-        cat = await guild.create_category(name, overwrites=ow or None)
+        cat = await guild.create_category(name, overwrites=ow if ow else None)
         logger.info(
             "[➕] Created category %r (orig ID %d) → clone ID %d",
             name,

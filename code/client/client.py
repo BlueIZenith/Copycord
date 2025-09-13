@@ -924,8 +924,17 @@ class ClientListener:
             parent_before = getattr(before, "category_id", None)
             parent_after = getattr(after, "category_id", None)
             parent_changed = parent_before != parent_after
+            perms_before = {
+                t.id: (ow.pair()[0].value, ow.pair()[1].value)
+                for t, ow in before.overwrites.items()
+            }
+            perms_after = {
+                t.id: (ow.pair()[0].value, ow.pair()[1].value)
+                for t, ow in after.overwrites.items()
+            }
+            perms_changed = perms_before != perms_after
 
-            if name_changed or parent_changed:
+            if name_changed or parent_changed or perms_changed:
                 self.schedule_sync()
             else:
                 logger.debug(

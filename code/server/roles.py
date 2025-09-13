@@ -344,10 +344,43 @@ class RoleManager:
                         logger.info("[🧩] Updated role %s", cloned.name)
                     except Exception as e:
                         logger.warning(
-                            "[⚠️] Failed updating role %s: %s", cloned.name, e
-                        )
+                        "[⚠️] Failed updating role %s: %s", cloned.name, e
+                    )
 
+        await self._reposition_roles(guild, incoming_filtered_roles, bot_top)
         return deleted, updated, created
+
+    async def _reposition_roles(
+        self,
+        guild: discord.Guild,
+        incoming_roles: List[RoleData],
+        bot_top: int,
+    ) -> None:
+        """Ensure cloned roles appear in the same relative order as the source."""
+        try:
+            mapping = {
+                r["original_role_id"]: r
+                for r in self.db.get_all_role_mappings()
+            }
+            base = bot_top - 1
+            pos: Dict[discord.Role, int] = {}
+            for idx, rdata in enumerate(incoming_roles):
+                row = mapping.get(rdata.id)
+                if not row:
+                    continue
+                cloned_id = row.get("cloned_role_id")
+                if not cloned_id:
+                    continue
+                cloned = guild.get_role(int(cloned_id))
+                if not cloned or cloned.position >= bot_top:
+                    continue
+                pos[cloned] = base - idx
+            if pos:
+                await self.ratelimit.acquire(ActionType.ROLE)
+                await guild.edit_role_positions(pos)
+                logger.debug("[🧩] Reordered %d roles", len(pos))
+        except Exception:
+            logger.exception("[⚠️] Failed to reorder roles")
 
     def _color_int(self, c) -> int:
         try:
